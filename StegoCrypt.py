@@ -3,12 +3,11 @@
 
 """
 StegoCrypt - Gelişmiş Steganografi Aracı
-Geliştirici: CaptainMGC
+Geliştirici: CaptainMGC (github.com/captainmgc)
 """
 
 import os
 import sys
-import argparse
 import numpy as np
 import cv2
 from PIL import Image
@@ -25,11 +24,12 @@ import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
 import base64
 from PIL import Image, ImageTk
+import webbrowser
 
-# SteganographyTool sınıfı aynı kalıyor
 class SteganographyTool:
     def __init__(self):
-        self.supported_formats = ['.png', '.bmp']
+        # Desteklenen formatları genişletiyoruz
+        self.supported_formats = ['.png', '.bmp', '.jpg', '.jpeg', '.tiff', '.gif', '.webp']
         self.header_size = 64  # Mesaj uzunluğu ve diğer meta verileri saklamak için
 
     def validate_image(self, image_path):
@@ -46,8 +46,8 @@ class SteganographyTool:
     def calculate_capacity(self, image_path):
         """Görüntünün maksimum kapasitesini hesaplar."""
         img = np.array(Image.open(image_path))
-        # RGB kanalları için piksel başına 3 bit - 1 bit header için
-        return (img.shape[0] * img.shape[1] * 3) // 8 - self.header_size
+        # RGB kanalları için daha hızlı hesaplama
+        return (img.size * 3) // 8 - self.header_size
 
     def text_to_binary(self, text):
         """Metni ikili (binary) formata dönüştürür."""
@@ -104,8 +104,15 @@ class SteganographyTool:
                 # Her pikselin her renk kanalında LSB'yi değiştir
                 for color_channel in range(min(3, len(pixel))):  # RGB için 3, RGBA için 4
                     if data_index < len(binary_message):
-                        # LSB'yi değiştir
-                        img_array[i, j, color_channel] = (img_array[i, j, color_channel] & ~1) | int(binary_message[data_index])
+                        # LSB'yi değiştir - Hata düzeltmesi: 0-255 aralığında tutmak için
+                        pixel_value = img_array[i, j, color_channel]
+                        # LSB'yi 0 yap
+                        pixel_value = pixel_value & ~1
+                        # Mesaj bitini ekle
+                        pixel_value = pixel_value | int(binary_message[data_index])
+                        # Değeri 0-255 aralığında tut
+                        img_array[i, j, color_channel] = np.clip(pixel_value, 0, 255)
+
                         data_index += 1
                         modified = True
                     else:
@@ -319,181 +326,12 @@ class SteganographyTool:
 
         raise ValueError("Bu görüntüde filigran bulunamadı.")
 
-# CLI sınıfı aynı kalıyor
-class CLI:
-    def __init__(self):
-        self.tool = SteganographyTool()
-        self.parser = self._create_parser()
-
-    def _create_parser(self):
-        parser = argparse.ArgumentParser(
-            description="StegoCrypt - Gelişmiş Steganografi Aracı",
-            formatter_class=argparse.RawDescriptionHelpFormatter
-        )
-
-        subparsers = parser.add_subparsers(dest="command", help="Komutlar")
-
-        # Gizleme komutu
-        embed_parser = subparsers.add_parser("embed", help="Görüntüye veri gizleme")
-        embed_parser.add_argument("-i", "--input", required=True, help="Giriş görüntü dosyası")
-        embed_parser.add_argument("-o", "--output", required=True, help="Çıkış görüntü dosyası")
-        embed_parser.add_argument("-m", "--message", help="Gizlenecek mesaj")
-        embed_parser.add_argument("-f", "--message-file", help="Gizlenecek mesaj dosyası")
-        embed_parser.add_argument("-e", "--encryption", choices=["aes", "rsa", "none"], default="none", help="Şifreleme yöntemi")
-        embed_parser.add_argument("-k", "--key", help="AES için şifreleme anahtarı")
-        embed_parser.add_argument("--public-key", help="RSA için açık anahtar dosyası")
-
-        # Çıkarma komutu
-        extract_parser = subparsers.add_parser("extract", help="Görüntüden veri çıkarma")
-        extract_parser.add_argument("-i", "--input", required=True, help="Giriş görüntü dosyası")
-        extract_parser.add_argument("-o", "--output", help="Çıkarılan mesajın kaydedileceği dosya")
-        extract_parser.add_argument("-e", "--encryption", choices=["aes", "rsa", "none"], default="none", help="Şifreleme yöntemi")
-        extract_parser.add_argument("-k", "--key", help="AES için şifreleme anahtarı")
-        extract_parser.add_argument("--private-key", help="RSA için özel anahtar dosyası")
-
-        # Kapasite kontrol komutu
-        capacity_parser = subparsers.add_parser("capacity", help="Görüntünün kapasitesini kontrol et")
-        capacity_parser.add_argument("-i", "--input", required=True, help="Giriş görüntü dosyası")
-
-        # RSA anahtar oluşturma komutu
-        keygen_parser = subparsers.add_parser("keygen", help="RSA anahtar çifti oluştur")
-        keygen_parser.add_argument("-o", "--output-prefix", default="stegocrypt_key", help="Anahtar dosyaları için önek")
-        keygen_parser.add_argument("-s", "--key-size", type=int, default=2048, help="Anahtar bit uzunluğu")
-
-        # Filigran ekleme komutu
-        watermark_parser = subparsers.add_parser("watermark", help="Görüntüye filigran ekle")
-        watermark_parser.add_argument("-i", "--input", required=True, help="Giriş görüntü dosyası")
-        watermark_parser.add_argument("-o", "--output", required=True, help="Çıkış görüntü dosyası")
-        watermark_parser.add_argument("-t", "--text", required=True, help="Filigran metni")
-
-        # GUI başlatma komutu
-        gui_parser = subparsers.add_parser("gui", help="Grafik arayüzünü başlat")
-
-        return parser
-
-    def run(self):
-        args = self.parser.parse_args()
-
-        if args.command == "embed":
-            try:
-                message = args.message
-                if args.message_file:
-                    with open(args.message_file, 'r') as f:
-                        message = f.read()
-
-                if not message:
-                    raise ValueError("Mesaj veya mesaj dosyası belirtilmelidir.")
-
-                encryption_key = None
-                if args.encryption == "aes":
-                    encryption_key = args.key
-                elif args.encryption == "rsa":
-                    if args.public_key:
-                        with open(args.public_key, 'r') as f:
-                            encryption_key = f.read()
-                    else:
-                        raise ValueError("RSA şifrelemesi için açık anahtar dosyası gereklidir.")
-
-                self.tool.embed_data(args.input, message, args.output, args.encryption, encryption_key)
-                print(f"Mesaj başarıyla '{args.output}' dosyasına gizlendi.")
-
-            except Exception as e:
-                print(f"Hata: {e}")
-                return 1
-
-        elif args.command == "extract":
-            try:
-                encryption_key = None
-                if args.encryption == "aes":
-                    encryption_key = args.key
-                elif args.encryption == "rsa":
-                    if args.private_key:
-                        with open(args.private_key, 'r') as f:
-                            encryption_key = f.read()
-                    else:
-                        raise ValueError("RSA şifre çözme için özel anahtar dosyası gereklidir.")
-
-                result = self.tool.extract_data(args.input, args.encryption, encryption_key)
-
-                if args.output:
-                    with open(args.output, 'w') as f:
-                        f.write(result['message'])
-                    print(f"Çıkarılan mesaj '{args.output}' dosyasına kaydedildi.")
-                else:
-                    print("Çıkarılan mesaj:")
-                    print("-" * 40)
-                    print(result['message'])
-                    print("-" * 40)
-
-                # Metadata bilgilerini göster
-                print("\nMetadata:")
-                for key, value in result['metadata'].items():
-                    print(f"{key}: {value}")
-
-            except Exception as e:
-                print(f"Hata: {e}")
-                return 1
-
-        elif args.command == "capacity":
-            try:
-                capacity = self.tool.calculate_capacity(args.input)
-                print(f"'{args.input}' dosyasının maksimum kapasitesi: {capacity} byte ({capacity/1024:.2f} KB)")
-
-            except Exception as e:
-                print(f"Hata: {e}")
-                return 1
-
-        elif args.command == "keygen":
-            try:
-                key_pair = self.tool.generate_rsa_keys(args.key_size)
-
-                private_key_file = f"{args.output_prefix}_private.pem"
-                public_key_file = f"{args.output_prefix}_public.pem"
-
-                with open(private_key_file, 'w') as f:
-                    f.write(key_pair['private_key'])
-
-                with open(public_key_file, 'w') as f:
-                    f.write(key_pair['public_key'])
-
-                print(f"RSA anahtar çifti oluşturuldu:")
-                print(f"  Özel anahtar: {private_key_file}")
-                print(f"  Açık anahtar: {public_key_file}")
-                print("\nÖNEMLİ: Özel anahtarınızı güvenli bir yerde saklayın!")
-
-            except Exception as e:
-                print(f"Hata: {e}")
-                return 1
-
-        elif args.command == "watermark":
-            try:
-                self.tool.add_watermark(args.input, args.text, args.output)
-                print(f"Filigran başarıyla '{args.output}' dosyasına eklendi.")
-
-            except Exception as e:
-                print(f"Hata: {e}")
-                return 1
-
-        elif args.command == "gui":
-            try:
-                gui = ModernGUI(self.tool)
-                gui.run()
-
-            except Exception as e:
-                print(f"Hata: {e}")
-                return 1
-
-        else:
-            self.parser.print_help()
-
-        return 0
-
 # Modern GUI sınıfı - Yenilenmiş tasarım
 class ModernGUI:
     def __init__(self, tool):
         self.tool = tool
         self.window = tk.Tk()
-        self.window.title("StegoCrypt - Steganografi Aracı")
+        self.window.title("StegoCrypt - Gelişmiş Steganografi Aracı")
 
         # Ekranın ortasında açılmasını sağla
         window_width = 900
@@ -509,21 +347,20 @@ class ModernGUI:
 
         # Daha okunaklı ve açık renkli tema
         self.colors = {
-    "bg_dark": "#f2f2f2",  # Çok hafif siyah
-    "bg_main": "#ffffff",  # Beyaz
-    "bg_light": "#e6e6e6",  # Hafif şeffaf siyah
-    "accent": "#007bff",  # Canlı mavi
-    "accent_hover": "#0056b3",  # Koyu mavi
-    "text_light": "#000000",  # Koyu siyah (okunaklı)
-    "text_dark": "#333333",  # Koyu gri
-    "success": "#28a745",  # Yeşil
-    "warning": "#ffc107",  # Sarı
-    "error": "#dc3545",  # Kırmızı
-    "border": "#cccccc"  # Açık gri
-}
+            "bg_dark": "#f2f2f2",  # Çok hafif siyah
+            "bg_main": "#ffffff",  # Beyaz
+            "bg_light": "#e6e6e6",  # Hafif şeffaf siyah
+            "accent": "#007bff",  # Canlı mavi
+            "accent_hover": "#0056b3",  # Koyu mavi
+            "text_light": "#000000",  # Koyu siyah (okunaklı)
+            "text_dark": "#333333",  # Koyu gri
+            "success": "#28a745",  # Yeşil
+            "warning": "#ffc107",  # Sarı
+            "error": "#dc3545",  # Kırmızı
+            "border": "#cccccc"  # Açık gri
+        }
 
         self.window.configure(bg=self.colors["bg_main"])
-
 
         # Font ayarları
         self.fonts = {
@@ -554,7 +391,9 @@ class ModernGUI:
             "lock": "icons/lock.png",
             "unlock": "icons/unlock.png",
             "key": "icons/key.png",
-            "file": "icons/file.png"
+            "file": "icons/file.png",
+            "info": "icons/info.png",
+            "github": "icons/github.png"
         }
 
         # İkonları yükle
@@ -579,7 +418,9 @@ class ModernGUI:
                 "lock": None,
                 "unlock": None,
                 "key": None,
-                "file": None
+                "file": None,
+                "info": None,
+                "github": None
             }
 
     def setup_theme(self):
@@ -683,6 +524,16 @@ class ModernGUI:
         keygen_frame = ttk.Frame(notebook)
         notebook.add(keygen_frame, text="RSA Anahtar Oluştur")
         self._create_keygen_frame(keygen_frame)
+
+        # GitHub bağlantısı
+        github_frame = ttk.Frame(self.window)
+        github_frame.pack(side=tk.BOTTOM, fill=tk.X, pady=5)
+
+        github_btn = ttk.Button(github_frame, text="github.com/captainmgc",
+                               command=lambda: webbrowser.open("https://github.com/captainmgc"))
+        if self.icon_images["github"]:
+            github_btn.config(image=self.icon_images["github"], compound=tk.LEFT)
+        github_btn.pack(side=tk.RIGHT, padx=10)
 
         # Durum çubuğu
         status_frame = ttk.Frame(self.window)
@@ -789,6 +640,12 @@ class ModernGUI:
         self.embed_public_key_label = ttk.Label(rsa_key_frame, text="Anahtar seçilmedi")
         self.embed_public_key_label.pack(side=tk.LEFT, padx=2, fill=tk.X, expand=True)
 
+        # Bilgi butonu
+        info_btn = ttk.Button(encryption_frame, text="Bilgi", command=lambda: self._show_info("embed_encryption"))
+        if self.icon_images["info"]:
+            info_btn.config(image=self.icon_images["info"], compound=tk.LEFT)
+        info_btn.pack(side=tk.BOTTOM, padx=5, pady=5, anchor=tk.SE)
+
         # Mesaj girişi (orta kısım)
         message_frame = ttk.LabelFrame(parent, text="Gizlenecek Mesaj")
         message_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=5)
@@ -814,6 +671,12 @@ class ModernGUI:
         if self.icon_images["file"]:
             file_btn.config(image=self.icon_images["file"], compound=tk.LEFT)
         file_btn.pack(side=tk.LEFT, padx=5)
+
+        # Bilgi butonu
+        info_btn = ttk.Button(button_frame, text="Bilgi", command=lambda: self._show_info("embed"))
+        if self.icon_images["info"]:
+            info_btn.config(image=self.icon_images["info"], compound=tk.LEFT)
+        info_btn.pack(side=tk.LEFT, padx=5)
 
         # Gizleme butonu
         embed_btn = ttk.Button(button_frame, text="Mesajı Gizle", command=self._embed_data)
@@ -900,6 +763,12 @@ class ModernGUI:
         self.extract_private_key_label = ttk.Label(rsa_key_frame, text="Anahtar seçilmedi")
         self.extract_private_key_label.pack(side=tk.LEFT, padx=2, fill=tk.X, expand=True)
 
+        # Bilgi butonu
+        info_btn = ttk.Button(encryption_frame, text="Bilgi", command=lambda: self._show_info("extract_encryption"))
+        if self.icon_images["info"]:
+            info_btn.config(image=self.icon_images["info"], compound=tk.LEFT)
+        info_btn.pack(side=tk.BOTTOM, padx=5, pady=5, anchor=tk.SE)
+
         # Çıkarılan mesaj (orta kısım)
         message_frame = ttk.LabelFrame(parent, text="Çıkarılan Mesaj")
         message_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=5)
@@ -941,6 +810,12 @@ class ModernGUI:
         if self.icon_images["file"]:
             save_btn.config(image=self.icon_images["file"], compound=tk.LEFT)
         save_btn.pack(side=tk.LEFT, padx=5)
+
+        # Bilgi butonu
+        info_btn = ttk.Button(button_frame, text="Bilgi", command=lambda: self._show_info("extract"))
+        if self.icon_images["info"]:
+            info_btn.config(image=self.icon_images["info"], compound=tk.LEFT)
+        info_btn.pack(side=tk.LEFT, padx=5)
 
         # Çıkarma butonu
         extract_btn = ttk.Button(button_frame, text="Mesajı Çıkar", command=self._extract_data)
@@ -1006,6 +881,12 @@ class ModernGUI:
             add_btn.config(image=self.icon_images["lock"], compound=tk.LEFT)
         add_btn.pack(padx=5, pady=10)
 
+        # Bilgi butonu
+        info_btn = ttk.Button(left_panel, text="Bilgi", command=lambda: self._show_info("watermark_add"))
+        if self.icon_images["info"]:
+            info_btn.config(image=self.icon_images["info"], compound=tk.LEFT)
+        info_btn.pack(side=tk.BOTTOM, padx=5, pady=5, anchor=tk.SE)
+
         # Sağ panel - filigran çıkarma
         right_panel = ttk.LabelFrame(operations_frame, text="Filigran Çıkarma")
         right_panel.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True, padx=5, pady=5)
@@ -1028,6 +909,12 @@ class ModernGUI:
 
         scrollbar.config(command=self.watermark_info_text.yview)
 
+        # Bilgi butonu
+        info_btn = ttk.Button(right_panel, text="Bilgi", command=lambda: self._show_info("watermark_extract"))
+        if self.icon_images["info"]:
+            info_btn.config(image=self.icon_images["info"], compound=tk.LEFT)
+        info_btn.pack(side=tk.BOTTOM, padx=5, pady=5, anchor=tk.SE)
+
     def _create_keygen_frame(self, parent):
         # Hızlı seçenekler
         options_frame = ttk.LabelFrame(parent, text="Anahtar Oluşturma Seçenekleri")
@@ -1047,6 +934,12 @@ class ModernGUI:
 
         self.key_prefix_var = tk.StringVar(value="stegocrypt_key")
         ttk.Entry(inner_frame, textvariable=self.key_prefix_var, width=20).pack(side=tk.LEFT, padx=5)
+
+        # Bilgi butonu
+        info_btn = ttk.Button(inner_frame, text="Bilgi", command=lambda: self._show_info("keygen"))
+        if self.icon_images["info"]:
+            info_btn.config(image=self.icon_images["info"], compound=tk.LEFT)
+        info_btn.pack(side=tk.RIGHT, padx=5)
 
         # Anahtar oluşturma butonu
         key_btn = ttk.Button(options_frame, text="RSA Anahtar Çifti Oluştur", command=self._generate_rsa_keys)
@@ -1070,10 +963,120 @@ class ModernGUI:
 
         scrollbar.config(command=self.key_info_text.yview)
 
+    def _show_info(self, info_type):
+        """Bilgi mesajlarını gösterir"""
+        info_messages = {
+            "embed": """
+Veri Gizleme Hakkında Bilgi:
+
+Bu sekme, herhangi bir metni bir görüntü dosyasına gizlemenizi sağlar. Gizleme işlemi, görüntüdeki piksellerin en düşük anlamlı bitlerini (LSB) değiştirerek gerçekleştirilir.
+
+Kullanım:
+1. Giriş görseli seçin (PNG, BMP, JPG, JPEG, TIFF, GIF, WEBP formatları desteklenir)
+2. Çıkış görseli için bir konum belirleyin
+3. Gizlemek istediğiniz metni yazın veya bir dosyadan yükleyin
+4. İsteğe bağlı olarak şifreleme yöntemi seçin
+5. "Mesajı Gizle" butonuna tıklayın
+
+Not: PNG ve BMP formatları kayıpsız sıkıştırma kullandığından en iyi sonuçları verir.
+            """,
+
+            "embed_encryption": """
+Şifreleme Seçenekleri Hakkında Bilgi:
+
+1. Şifreleme Yok: Mesaj olduğu gibi gizlenir, herhangi biri görseli analiz ederek mesajı çıkarabilir.
+
+2. AES-256 Şifreleme: Mesaj, girdiğiniz anahtar ile AES-256 algoritması kullanılarak şifrelenir. Mesajı çıkarmak için aynı anahtarı kullanmanız gerekir.
+
+3. RSA Şifreleme: Mesaj, seçtiğiniz RSA açık anahtar ile şifrelenir. Mesajı çıkarmak için eşleşen özel anahtarı kullanmanız gerekir.
+
+Not: RSA, AES'e göre daha güvenli ancak daha büyük mesajlar için uygun değildir.
+            """,
+
+            "extract": """
+Veri Çıkarma Hakkında Bilgi:
+
+Bu sekme, daha önce StegoCrypt ile gizlenmiş bir mesajı bir görüntü dosyasından çıkarmanızı sağlar.
+
+Kullanım:
+1. Gizli mesaj içeren görüntü dosyasını seçin
+2. Mesaj şifrelenmişse, doğru şifreleme yöntemini ve anahtarı seçin
+3. "Mesajı Çıkar" butonuna tıklayın
+4. Çıkarılan mesajı görüntüleyin veya dosyaya kaydedin
+
+Not: Metadata bölümünde, mesajın ne zaman gizlendiği ve hangi şifreleme yöntemi kullanıldığı gibi bilgiler görüntülenir.
+            """,
+
+            "extract_encryption": """
+Şifre Çözme Seçenekleri Hakkında Bilgi:
+
+1. Şifreleme Yok: Mesaj şifrelenmemişse bu seçeneği kullanın.
+
+2. AES-256 Şifreleme: Mesaj AES-256 ile şifrelenmişse, şifreyi çözmek için kullanılan anahtarı girin.
+
+3. RSA Şifreleme: Mesaj RSA ile şifrelenmişse, şifreyi çözmek için özel anahtarı seçin.
+
+Not: Yanlış şifreleme yöntemi veya anahtar kullanırsanız, mesaj doğru şekilde çözülemez.
+            """,
+
+            "watermark_add": """
+Filigran Ekleme Hakkında Bilgi:
+
+Filigran, bir görüntüye telif hakkı bilgisi veya sahiplik bilgisi eklemek için kullanılır. Filigran, görüntüyü görsel olarak değiştirmeden gizlenir.
+
+Kullanım:
+1. Giriş görseli seçin
+2. Çıkış görseli için bir konum belirleyin
+3. Filigran metnini girin (örn. "© 2025 CaptainMGC")
+4. "Filigran Ekle" butonuna tıklayın
+
+Not: Filigran, steganografi kullanılarak gizlenir ve görüntüyü görsel olarak etkilemez.
+            """,
+
+            "watermark_extract": """
+Filigran Çıkarma Hakkında Bilgi:
+
+Bu özellik, daha önce StegoCrypt ile eklenmiş bir filigranı bir görüntüden çıkarmanızı sağlar.
+
+Kullanım:
+1. Filigran içeren görüntü dosyasını seçin
+2. "Filigranı Çıkar" butonuna tıklayın
+3. Çıkarılan filigran bilgilerini görüntüleyin
+
+Not: Filigran bilgileri, filigran metnini ve ne zaman eklendiğini içerir.
+            """,
+
+            "keygen": """
+RSA Anahtar Oluşturma Hakkında Bilgi:
+
+RSA, asimetrik bir şifreleme algoritmasıdır ve bir açık anahtar ve bir özel anahtar çifti kullanır. Açık anahtar mesajları şifrelemek için, özel anahtar ise şifrelenmiş mesajları çözmek için kullanılır.
+
+Kullanım:
+1. Anahtar boyutu seçin (bit cinsinden, daha büyük = daha güvenli ama daha yavaş)
+2. Anahtar dosyaları için bir önek girin
+3. "RSA Anahtar Çifti Oluştur" butonuna tıklayın
+4. Oluşturulan anahtarları kullanın
+
+ÖNEMLİ: Özel anahtarınızı güvenli bir yerde saklayın! Özel anahtarınız kaybolursa, şifrelenmiş mesajlarınızı çözemezsiniz.
+            """
+        }
+
+        if info_type in info_messages:
+            messagebox.showinfo("Bilgi", info_messages[info_type])
+        else:
+            messagebox.showinfo("Bilgi", "Bu özellik hakkında bilgi bulunmamaktadır.")
+
     def _browse_embed_input(self):
+        file_types = [("Tüm Desteklenen Formatlar",
+                     "*.png;*.bmp;*.jpg;*.jpeg;*.tiff;*.gif;*.webp")]
+        for ext in self.tool.supported_formats:
+            ext_clean = ext.replace(".", "")
+            file_types.append((f"{ext_clean.upper()} Dosyaları", f"*.{ext_clean}"))
+        file_types.append(("Tüm Dosyalar", "*.*"))
+
         file_path = filedialog.askopenfilename(
             title="Giriş Görselini Seç",
-            filetypes=[("Görüntü Dosyaları", "*.png;*.bmp"), ("Tüm Dosyalar", "*.*")]
+            filetypes=file_types
         )
         if file_path:
             self.embed_input_path_var.set(file_path)
@@ -1082,25 +1085,44 @@ class ModernGUI:
             self.embed_output_path_var.set(f"{base}_stego{ext}")
 
     def _browse_embed_output(self):
+        file_types = []
+        for ext in self.tool.supported_formats:
+            ext_clean = ext.replace(".", "")
+            file_types.append((f"{ext_clean.upper()} Dosyası", f"*.{ext_clean}"))
+
         file_path = filedialog.asksaveasfilename(
             title="Çıkış Görselini Seç",
-            filetypes=[("PNG Görüntüsü", "*.png"), ("BMP Görüntüsü", "*.bmp")]
+            filetypes=file_types
         )
         if file_path:
             self.embed_output_path_var.set(file_path)
 
     def _browse_extract_input(self):
+        file_types = [("Tüm Desteklenen Formatlar",
+                     "*.png;*.bmp;*.jpg;*.jpeg;*.tiff;*.gif;*.webp")]
+        for ext in self.tool.supported_formats:
+            ext_clean = ext.replace(".", "")
+            file_types.append((f"{ext_clean.upper()} Dosyaları", f"*.{ext_clean}"))
+        file_types.append(("Tüm Dosyalar", "*.*"))
+
         file_path = filedialog.askopenfilename(
             title="Görsel Dosyasını Seç",
-            filetypes=[("Görüntü Dosyaları", "*.png;*.bmp"), ("Tüm Dosyalar", "*.*")]
+            filetypes=file_types
         )
         if file_path:
             self.extract_input_path_var.set(file_path)
 
     def _browse_watermark_input(self):
+        file_types = [("Tüm Desteklenen Formatlar",
+                     "*.png;*.bmp;*.jpg;*.jpeg;*.tiff;*.gif;*.webp")]
+        for ext in self.tool.supported_formats:
+            ext_clean = ext.replace(".", "")
+            file_types.append((f"{ext_clean.upper()} Dosyaları", f"*.{ext_clean}"))
+        file_types.append(("Tüm Dosyalar", "*.*"))
+
         file_path = filedialog.askopenfilename(
             title="Giriş Görselini Seç",
-            filetypes=[("Görüntü Dosyaları", "*.png;*.bmp"), ("Tüm Dosyalar", "*.*")]
+            filetypes=file_types
         )
         if file_path:
             self.watermark_input_path_var.set(file_path)
@@ -1109,9 +1131,14 @@ class ModernGUI:
             self.watermark_output_path_var.set(f"{base}_watermarked{ext}")
 
     def _browse_watermark_output(self):
+        file_types = []
+        for ext in self.tool.supported_formats:
+            ext_clean = ext.replace(".", "")
+            file_types.append((f"{ext_clean.upper()} Dosyası", f"*.{ext_clean}"))
+
         file_path = filedialog.asksaveasfilename(
             title="Çıkış Görselini Seç",
-            filetypes=[("PNG Görüntüsü", "*.png"), ("BMP Görüntüsü", "*.bmp")]
+            filetypes=file_types
         )
         if file_path:
             self.watermark_output_path_var.set(file_path)
@@ -1149,9 +1176,11 @@ class ModernGUI:
         )
         if file_path:
             try:
-                with open(file_path, 'r') as f:
+                # Büyük dosyalar için chunked okuma
+                with open(file_path, 'r', encoding='utf-8') as f:
                     self.embed_message_text.delete(1.0, tk.END)
-                    self.embed_message_text.insert(tk.END, f.read())
+                    while chunk := f.read(8192):  # 8KB chunks
+                        self.embed_message_text.insert(tk.END, chunk)
             except Exception as e:
                 messagebox.showerror("Hata", f"Dosya okunamadı: {e}")
 
@@ -1161,197 +1190,184 @@ class ModernGUI:
             filetypes=[("Metin Dosyaları", "*.txt"), ("Tüm Dosyalar", "*.*")]
         )
         if file_path:
-            try:
-                with open(file_path, 'w') as f:
-                    f.write(self.extract_message_text.get(1.0, tk.END))
-                self.status_var.set(f"Mesaj '{file_path}' dosyasına kaydedildi.")
-            except Exception as e:
-                messagebox.showerror("Hata", f"Dosya kaydedilemedi: {e}")
+            self._save_file_content(file_path, self.extract_message_text.get(1.0, tk.END))
+            self.status_var.set(f"Mesaj '{file_path}' dosyasına kaydedildi.")
+
+    def _save_file_content(self, file_path, content):
+        """Dosya kaydetme işlemleri için yardımcı fonksiyon"""
+        try:
+            with open(file_path, 'w', encoding='utf-8') as f:
+                f.write(content)
+            return True
+        except Exception as e:
+            messagebox.showerror("Hata", f"Dosya kaydedilemedi: {e}")
+            return False
+
+    def _handle_operation(self, operation_name, operation_func, *args):
+        """Genel hata yönetimi için yardımcı fonksiyon"""
+        try:
+            self.status_var.set(f"{operation_name} işlemi yapılıyor...")
+            self.window.update()
+
+            result = operation_func(*args)
+
+            self.status_var.set(f"{operation_name} işlemi başarılı.")
+            return result
+
+        except Exception as e:
+            self.status_var.set(f"Hata: {e}")
+            messagebox.showerror("Hata", str(e))
+            return None
 
     def _embed_data(self):
-        try:
-            input_path = self.embed_input_path_var.get()
-            output_path = self.embed_output_path_var.get()
-            message = self.embed_message_text.get(1.0, tk.END).rstrip()
-            encryption = self.embed_encryption_var.get()
+        self._handle_operation("Mesaj gizleme", self._embed_data_operation)
 
-            if not input_path or not output_path:
-                raise ValueError("Giriş ve çıkış görselleri seçilmelidir.")
+    def _embed_data_operation(self):
+        input_path = self.embed_input_path_var.get()
+        output_path = self.embed_output_path_var.get()
+        message = self.embed_message_text.get(1.0, tk.END).rstrip()
+        encryption = self.embed_encryption_var.get()
 
-            if not message:
-                raise ValueError("Gizlenecek mesaj boş olamaz.")
+        if not input_path or not output_path:
+            raise ValueError("Giriş ve çıkış görselleri seçilmelidir.")
 
-            encryption_key = None
-            if encryption == "aes":
-                encryption_key = self.embed_aes_key_var.get()
-                if not encryption_key:
-                    raise ValueError("AES şifrelemesi için anahtar gereklidir.")
-            elif encryption == "rsa":
-                encryption_key = self.rsa_public_key
-                if not encryption_key:
-                    raise ValueError("RSA şifrelemesi için açık anahtar gereklidir.")
+        if not message:
+            raise ValueError("Gizlenecek mesaj boş olamaz.")
 
-            self.status_var.set("Mesaj gizleniyor...")
-            self.window.update()
+        encryption_key = None
+        if encryption == "aes":
+            encryption_key = self.embed_aes_key_var.get()
+            if not encryption_key:
+                raise ValueError("AES şifrelemesi için anahtar gereklidir.")
+        elif encryption == "rsa":
+            encryption_key = self.rsa_public_key
+            if not encryption_key:
+                raise ValueError("RSA şifrelemesi için açık anahtar gereklidir.")
 
-            self.tool.embed_data(input_path, message, output_path, encryption, encryption_key)
+        self.tool.embed_data(input_path, message, output_path, encryption, encryption_key)
 
-            self.status_var.set(f"Mesaj başarıyla '{output_path}' dosyasına gizlendi.")
-            messagebox.showinfo("Başarılı", "Mesaj başarıyla gizlendi!")
-
-        except Exception as e:
-            self.status_var.set(f"Hata: {e}")
-            messagebox.showerror("Hata", str(e))
+        messagebox.showinfo("Başarılı", "Mesaj başarıyla gizlendi!")
 
     def _extract_data(self):
-        try:
-            input_path = self.extract_input_path_var.get()
-            encryption = self.extract_encryption_var.get()
+        self._handle_operation("Mesaj çıkarma", self._extract_data_operation)
 
-            if not input_path:
-                raise ValueError("Görsel dosyası seçilmelidir.")
+    def _extract_data_operation(self):
+        input_path = self.extract_input_path_var.get()
+        encryption = self.extract_encryption_var.get()
 
-            encryption_key = None
-            if encryption == "aes":
-                encryption_key = self.extract_aes_key_var.get()
-                if not encryption_key:
-                    raise ValueError("AES şifre çözme için anahtar gereklidir.")
-            elif encryption == "rsa":
-                encryption_key = self.rsa_private_key
-                if not encryption_key:
-                    raise ValueError("RSA şifre çözme için özel anahtar gereklidir.")
+        if not input_path:
+            raise ValueError("Görsel dosyası seçilmelidir.")
 
-            self.status_var.set("Mesaj çıkarılıyor...")
-            self.window.update()
+        encryption_key = None
+        if encryption == "aes":
+            encryption_key = self.extract_aes_key_var.get()
+            if not encryption_key:
+                raise ValueError("AES şifre çözme için anahtar gereklidir.")
+        elif encryption == "rsa":
+            encryption_key = self.rsa_private_key
+            if not encryption_key:
+                raise ValueError("RSA şifre çözme için özel anahtar gereklidir.")
 
-            result = self.tool.extract_data(input_path, encryption, encryption_key)
+        result = self.tool.extract_data(input_path, encryption, encryption_key)
 
-            # Mesajı göster
-            self.extract_message_text.config(state=tk.NORMAL)
-            self.extract_message_text.delete(1.0, tk.END)
-            self.extract_message_text.insert(tk.END, result['message'])
-            self.extract_message_text.config(state=tk.NORMAL)
+        # Mesajı göster
+        self._update_text_widget(self.extract_message_text, result['message'])
 
-            # Metadata bilgilerini göster
-            self.extract_metadata_text.config(state=tk.NORMAL)
-            self.extract_metadata_text.delete(1.0, tk.END)
+        # Metadata bilgilerini göster
+        metadata_text = ""
+        for key, value in result['metadata'].items():
+            metadata_text += f"{key}: {value}\n"
 
-            metadata_text = ""
-            for key, value in result['metadata'].items():
-                metadata_text += f"{key}: {value}\n"
-
-            self.extract_metadata_text.insert(tk.END, metadata_text)
-            self.extract_metadata_text.config(state=tk.NORMAL)
-
-            self.status_var.set("Mesaj başarıyla çıkarıldı.")
-
-        except Exception as e:
-            self.status_var.set(f"Hata: {e}")
-            messagebox.showerror("Hata", str(e))
+        self._update_text_widget(self.extract_metadata_text, metadata_text)
 
     def _add_watermark(self):
-        try:
-            input_path = self.watermark_input_path_var.get()
-            output_path = self.watermark_output_path_var.get()
-            watermark_text = self.watermark_text_var.get()
+        self._handle_operation("Filigran ekleme", self._add_watermark_operation)
 
-            if not input_path or not output_path:
-                raise ValueError("Giriş ve çıkış görselleri seçilmelidir.")
+    def _add_watermark_operation(self):
+        input_path = self.watermark_input_path_var.get()
+        output_path = self.watermark_output_path_var.get()
+        watermark_text = self.watermark_text_var.get()
 
-            if not watermark_text:
-                raise ValueError("Filigran metni boş olamaz.")
+        if not input_path or not output_path:
+            raise ValueError("Giriş ve çıkış görselleri seçilmelidir.")
 
-            self.status_var.set("Filigran ekleniyor...")
-            self.window.update()
+        if not watermark_text:
+            raise ValueError("Filigran metni boş olamaz.")
 
-            self.tool.add_watermark(input_path, watermark_text, output_path)
+        self.tool.add_watermark(input_path, watermark_text, output_path)
 
-            self.status_var.set(f"Filigran başarıyla '{output_path}' dosyasına eklendi.")
-            messagebox.showinfo("Başarılı", "Filigran başarıyla eklendi!")
-
-        except Exception as e:
-            self.status_var.set(f"Hata: {e}")
-            messagebox.showerror("Hata", str(e))
+        messagebox.showinfo("Başarılı", "Filigran başarıyla eklendi!")
 
     def _extract_watermark(self):
-        try:
-            input_path = self.watermark_input_path_var.get()
+        self._handle_operation("Filigran çıkarma", self._extract_watermark_operation)
 
-            if not input_path:
-                raise ValueError("Görsel dosyası seçilmelidir.")
+    def _extract_watermark_operation(self):
+        input_path = self.watermark_input_path_var.get()
 
-            self.status_var.set("Filigran çıkarılıyor...")
-            self.window.update()
+        if not input_path:
+            raise ValueError("Görsel dosyası seçilmelidir.")
 
-            watermark = self.tool.extract_watermark(input_path)
+        watermark = self.tool.extract_watermark(input_path)
 
-            # Filigran bilgilerini göster
-            self.watermark_info_text.config(state=tk.NORMAL)
-            self.watermark_info_text.delete(1.0, tk.END)
-
-            watermark_text = ""
-            for key, value in watermark.items():
-                watermark_text += f"{key}: {value}\n"
-
-            self.watermark_info_text.insert(tk.END, watermark_text)
-            self.watermark_info_text.config(state=tk.NORMAL)
-
-            self.status_var.set("Filigran başarıyla çıkarıldı.")
-
-        except Exception as e:
-            self.status_var.set(f"Hata: {e}")
-            messagebox.showerror("Hata", str(e))
+        # watermark_text değişkeni tanımlanmamış, düzeltilmeli
+        watermark_info = f"""
+Filigran Bilgileri:
+Metin: {watermark['text']}
+Tarih: {watermark['timestamp']}
+Tür: {watermark['type']}
+"""
+        self.watermark_info_text.config(state=tk.NORMAL)
+        self.watermark_info_text.delete(1.0, tk.END)
+        self.watermark_info_text.insert(tk.END, watermark_info)
+        self.watermark_info_text.config(state=tk.DISABLED)
 
     def _generate_rsa_keys(self):
-        try:
-            key_size = int(self.key_size_var.get())
-            key_prefix = self.key_prefix_var.get()
+        self._handle_operation("RSA anahtar oluşturma", self._generate_rsa_keys_operation)
 
-            if not key_prefix:
-                key_prefix = "stegocrypt_key"
+    def _generate_rsa_keys_operation(self):
+        key_size = int(self.key_size_var.get())
+        key_prefix = self.key_prefix_var.get()
 
-            self.status_var.set(f"{key_size} bit RSA anahtarları oluşturuluyor...")
-            self.window.update()
+        if not key_prefix:
+            key_prefix = "stegocrypt_key"
 
-            key_pair = self.tool.generate_rsa_keys(key_size)
+        key_pair = self.tool.generate_rsa_keys(key_size)
 
-            private_key_file = f"{key_prefix}_private.pem"
-            public_key_file = f"{key_prefix}_public.pem"
+        private_key_file = f"{key_prefix}_private.pem"
+        public_key_file = f"{key_prefix}_public.pem"
 
-            with open(private_key_file, 'w') as f:
-                f.write(key_pair['private_key'])
+        with open(private_key_file, 'w') as f:
+            f.write(key_pair['private_key'])
 
-            with open(public_key_file, 'w') as f:
-                f.write(key_pair['public_key'])
+        with open(public_key_file, 'w') as f:
+            f.write(key_pair['public_key'])
 
-            # Anahtar bilgilerini göster
-            self.key_info_text.config(state=tk.NORMAL)
-            self.key_info_text.delete(1.0, tk.END)
+        info_text = f"""
+RSA Anahtar Çifti Oluşturuldu:
+- Anahtar Boyutu: {key_size} bit
+- Özel Anahtar: {private_key_file}
+- Açık Anahtar: {public_key_file}
 
-            info_text = (
-                f"RSA anahtar çifti oluşturuldu:\n\n"
-                f"  Bit Uzunluğu: {key_size}\n"
-                f"  Özel Anahtar: {os.path.abspath(private_key_file)}\n"
-                f"  Açık Anahtar: {os.path.abspath(public_key_file)}\n\n"
-                f"ÖNEMLİ: Özel anahtarınızı güvenli bir yerde saklayın!"
-            )
+Anahtarlar başarıyla kaydedildi.
+"""
+        self._update_text_widget(self.key_info_text, info_text)
 
-            self.key_info_text.insert(tk.END, info_text)
-            self.key_info_text.config(state=tk.NORMAL)
+        messagebox.showinfo("Başarılı", "RSA anahtar çifti başarıyla oluşturuldu!")
 
-            self.status_var.set("RSA anahtar çifti başarıyla oluşturuldu.")
-            messagebox.showinfo("Başarılı", "RSA anahtar çifti başarıyla oluşturuldu!")
-
-        except Exception as e:
-            self.status_var.set(f"Hata: {e}")
-            messagebox.showerror("Hata", str(e))
+    def _update_text_widget(self, widget, text):
+        """Text widget'ları güncellemek için yardımcı fonksiyon"""
+        widget.config(state=tk.NORMAL)
+        widget.delete(1.0, tk.END)
+        widget.insert(tk.END, text)
+        widget.config(state=tk.DISABLED)
 
     def run(self):
         self.window.mainloop()
 
 def main():
-    cli = CLI()
-    return cli.run()
+    tool = SteganographyTool()
+    gui = ModernGUI(tool)
+    gui.run()
 
 if __name__ == "__main__":
-    sys.exit(main())
+    main()
