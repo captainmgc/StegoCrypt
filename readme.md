@@ -1,6 +1,7 @@
 # 🚀 StegoCrypt - Gelişmiş Steganografi Aracı
 
-![StegoCrypt Logo](<!-- Logo URL'si -->)
+![StegoCrypt Logo](https://blogger.googleusercontent.com/img/b/R29vZ2xl/AVvXsEix0D0HWcVmWrxjjIDKpR7j_7iy9Se7CWRUGoB0DOJAK807UFLjKOD12Ydm45WmsGKh4I6zgfc4AA3GRiHYyzuVkKmkMBH3gzbSpwKHUwvdhl2Pbdn29EW4tfTiVIqwj_QdGtCSHhgb5eBjgT1CUrIxfsALuB9W4UXeaqFtFyY7VENT3yk0RFHhwX7rkVk/s500/logo.png)
+
 
 ## 📌 İçindekiler
 - [📖 Proje Hakkında](#-proje-hakkında)
