@@ -49,7 +49,7 @@ cd StegoCrypt
 ## 🎨 Grafik Arayüzü
 StegoCrypt, yalnızca **grafik arayüzü (GUI)** üzerinden çalışmaktadır. GUI'yi başlatmak için:
 ```bash
-python StegoCrypt.py gui
+python StegoCrypt.py
 ```
 
 ---
