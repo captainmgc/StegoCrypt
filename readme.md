@@ -48,6 +48,9 @@ Katkıda bulunmak isterseniz, bir **pull request** oluşturabilir veya **sorunla
 Bu proje **MIT Lisansı** ile lisanslanmıştır. Daha fazla bilgi için `LICENSE` dosyasını kontrol edin.
 
 ---
+👨‍💻 Geliştirici
+**[Captain MGC](https://github.com/captainmgc)**  tarafından oluşturuldu 🚀
 
 StegoCrypt ile **gizli mesajlarınızı güvence altına alın!** 🎉🔐
+
 
