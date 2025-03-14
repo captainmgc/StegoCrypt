@@ -1,7 +1,6 @@
 # 🚀 StegoCrypt - Gelişmiş Steganografi Aracı
 
-![StegoCrypt Logo](https://blogger.googleusercontent.com/img/b/R29vZ2xl/AVvXsEix0D0HWcVmWrxjjIDKpR7j_7iy9Se7CWRUGoB0DOJAK807UFLjKOD12Ydm45WmsGKh4I6zgfc4AA3GRiHYyzuVkKmkMBH3gzbSpwKHUwvdhl2Pbdn29EW4tfTiVIqwj_QdGtCSHhgb5eBjgT1CUrIxfsALuB9W4UXeaqFtFyY7VENT3yk0RFHhwX7rkVk/s500/logo.png)
-
+![StegoCrypt Logo](https://blogger.googleusercontent.com/img/b/R29vZ2xl/AVvXsEjuyuf-kDP1U0Ij2LkgJ0egjL3iXn3hqO-sXP05CVXOSHwfsFzUgXAyQvdlJDHPBY1hxLDu7V7nn57ysISJgcvGbaGxqFlpH_IZ7kwTfVPXqQIJCOtxpdOa-AiLE4fuqHKNSMfH4UfkGr70AIKukv6Ry8vZ0mfV1-pcb4A9k3td8yZTzdREC0mBQPFTXyE/s16000/Gemini_Generated_Image_bfr7e4bfr7e4bfr7.jpeg)
 
 ## 📌 İçindekiler
 - [📖 Proje Hakkında](#-proje-hakkında)
